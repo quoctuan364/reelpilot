@@ -1,6 +1,13 @@
 # ReelPilot Studio v2.0 — Auto-Video Pipeline, Telegram Mobile & Shorts/Reels Publisher
 
+[![Zero Dependencies](https://img.shields.io/badge/ZERO_DEPENDENCIES-NODE_SQLITE_WAL-0B0E14?style=for-the-badge&labelColor=10B981)](https://github.com/quoctuan364/reelpilot)
+[![YouTube Shorts](https://img.shields.io/badge/YOUTUBE-DATA_API_V3-EF4444?style=for-the-badge&labelColor=0B0E14)](#)
+[![Facebook Reels](https://img.shields.io/badge/FACEBOOK-META_GRAPH_API-3B82F6?style=for-the-badge&labelColor=0B0E14)](#)
+[![Telegram Bot](https://img.shields.io/badge/MOBILE-TELEGRAM_BOT-06B6D4?style=for-the-badge&labelColor=0B0E14)](#)
+
 **ReelPilot Studio v2.0** là hệ thống tự động hóa video ngắn `9:16` chạy cục bộ trên máy cá nhân (`Node.js >= 22.5 + node:sqlite WAL`, **0 thư viện ngoài**) — cho phép **ra lệnh từ điện thoại qua Telegram Bot → tự viết kịch bản & phụ đề `.SRT` bằng Gemini AI → tự tải cảnh nền 9:16 miễn phí từ Pexels → tự ghép giọng đọc & dựng `.MP4` bằng FFmpeg → duyệt 1 chạm và tự đăng lên YouTube Shorts & Facebook Page Reels**.
+
+![ReelPilot Studio v2.0 — Auto-Video Pipeline Dashboard](./preview-v2.png)
 
 ---
 
