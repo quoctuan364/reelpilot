@@ -1,43 +1,37 @@
-# ReelPilot Studio v1.0 — Auto-Publisher cho YouTube Shorts & Facebook Page Reels
+# ReelPilot Studio v2.0 — Auto-Video Pipeline, Telegram Mobile & Shorts/Reels Publisher
 
-**ReelPilot Studio** là Web Dashboard chạy cục bộ trên máy cá nhân (`Node.js >= 22.5 + node:sqlite WAL`, **0 thư viện ngoài**) giúp bạn nạp video dọc `9:16`, dùng **Gemini AI** viết tiêu đề/mô tả/hashtag, lên lịch tự động đăng lên **YouTube Shorts** và **Facebook Page Reels** qua API chính thức.
-
----
-
-## Tính năng chính
-
-- **Kéo thả Video 9:16 & Xem trước trực tiếp:** Hỗ trợ `.mp4`, `.mov`, `.webm`, `.mkv` (tối đa 250MB), lưu gọn trong `data/uploads/`.
-- **AI Viết Tiêu Đề, Mô Tả & Hashtag (`Gemini 2.5 Flash`):** Nhập chủ đề hoặc kịch bản ngắn → tự động sinh tiêu đề chuẩn `#Shorts`, mô tả có CTA, hashtag và mẹo Hook 3 giây đầu (tự có chế độ **Offline Preview** khi chưa gắn Gemini API Key).
-- **Chế độ Chạy Thử An Toàn (`Dry-Run Simulation`):** Cho phép kiểm thử toàn bộ luồng tải video, hẹn giờ, bộ lập lịch 15 giây và nhật ký đăng tải trước khi chuyển sang chế độ **Đăng Thật (`LIVE`)**.
-- **YouTube Shorts (YouTube Data API v3):** Hỗ trợ OAuth 2.0 (`access_type=offline` tự làm mới token) và giao thức `Resumable Upload`.
-- **Facebook Page Reels (Meta Graph API v21.0):** Hỗ trợ đủ quy trình 3 bước chính thức (`start` → `rupload.facebook.com` → `finish` với `video_state=PUBLISHED`) dành cho **Fanpage Facebook**.
-- **Lưu trữ bền vững bằng SQLite WAL (`data/reelpilot.sqlite`):** Giữ nguyên hàng đợi, lịch hẹn, nhật ký hoạt động và cấu hình giữa các lần tắt/mở máy.
+**ReelPilot Studio v2.0** là hệ thống tự động hóa video ngắn `9:16` chạy cục bộ trên máy cá nhân (`Node.js >= 22.5 + node:sqlite WAL`, **0 thư viện ngoài**) — cho phép **ra lệnh từ điện thoại qua Telegram Bot → tự viết kịch bản & phụ đề `.SRT` bằng Gemini AI → tự tải cảnh nền 9:16 miễn phí từ Pexels → tự ghép giọng đọc & dựng `.MP4` bằng FFmpeg → duyệt 1 chạm và tự đăng lên YouTube Shorts & Facebook Page Reels**.
 
 ---
 
-## Khởi chạy nhanh (1-Click trên Windows)
+## Kiến trúc Dây Chuyền Tự Động (v2.0)
 
-1. Nhấp đúp file **`start-reelpilot.bat`**.
-2. Trình duyệt tự mở địa chỉ **`http://localhost:4330`**.
-3. Mặc định hệ thống chạy ở chế độ **`DRY-RUN`** — bạn có thể thử upload video, bấm **AI Viết Tiêu Đề**, đặt lịch và bấm **Đăng ngay** để xem luồng hoạt động ngay lập tức.
+1. **Điều khiển từ điện thoại (`Telegram Bot`):** Nhắn `/make <chủ đề>` cho bot Telegram của riêng bạn → bot chạy toàn bộ quy trình rồi gửi video/kịch bản về điện thoại kèm nút **`✅ Duyệt & Đăng Ngay`**, **`⏰ Hẹn +1 Giờ`**, **`🗑 Xóa Nháp`**.
+2. **Sinh kịch bản, cảnh quay & phụ đề `.SRT` (`Gemini 2.5 Flash`):** Tự động chia 4–6 cảnh kèm lời thoại, chữ phụ đề ngắn và từ khóa tiếng Anh tìm video nền (có sẵn **Offline Preview** khi chưa gắn key).
+3. **Tự lấy video nền 9:16 sạch bản quyền (`Pexels Video API`):** Tự tìm và tải cảnh dọc HD không dính bản quyền theo từng cảnh kịch bản.
+4. **Tự dựng `.MP4` 1080×1920 (`FFmpeg` + Windows Speech TTS):** Tự scale/crop 9:16, ghép các cảnh, trộn giọng đọc và đốt phụ đề chữ lớn trong vùng an toàn.
+5. **Tự đăng đa nền tảng (`YouTube Data API v3` + `Meta Graph API v21.0`):** Hỗ trợ đầy đủ chế độ **Dry-Run (Chạy thử an toàn)** và **Live Publishing (Đăng thật)** kèm bộ lập lịch quét mỗi 15 giây.
 
 ---
 
-## Hướng dẫn gắn API thật khi muốn chuyển sang chế độ `LIVE`
+## Khởi chạy nhanh (Windows 1-Click)
 
-### 1. YouTube Shorts (Google Cloud Console)
-1. Tạo project tại [Google Cloud Console](https://console.cloud.google.com/) → bật **YouTube Data API v3**.
-2. Tạo **OAuth 2.0 Client ID** (loại *Web application*) và thêm Authorized Redirect URI:
-   ```text
-   http://localhost:4330/api/oauth/youtube/callback
+1. Nhấp đúp **`start-reelpilot.bat`** → mở trình duyệt tại `http://localhost:4330`.
+2. *(Tùy chọn để bật render `.MP4` tự động)* Cài miễn phí FFmpeg bằng 1 lệnh PowerShell:
+   ```powershell
+   winget install Gyan.FFmpeg
    ```
-3. Dán `Client ID` và `Client Secret` vào tab **Kết Nối API & Chế Độ** trong ReelPilot → bấm **Kết nối Google / YouTube OAuth**.
+   Sau đó mở lại `start-reelpilot.bat`.
 
-### 2. Facebook Page Reels (Meta for Developers)
-> Lưu ý: Meta Graph API chỉ hỗ trợ đăng Reels tự động lên **Facebook Page (Fanpage)**, không hỗ trợ trang cá nhân.
-1. Tạo ứng dụng tại [Meta for Developers](https://developers.facebook.com/) → lấy **Page ID** và **Page Access Token** có quyền `pages_manage_posts` và `pages_read_engagement`.
-2. Dán vào tab **Kết Nối API & Chế Độ** → bấm **Lưu toàn bộ cấu hình** → bấm **Kiểm tra kết nối API**.
+---
 
-### 3. Gemini API Key (Tùy chọn)
-1. Lấy API Key miễn phí tại [Google AI Studio](https://aistudio.google.com/).
-2. Dán vào ô **Gemini API Key** trong tab **Kết Nối API & Chế Độ**.
+## Hướng dẫn gắn tài khoản thật (tab *Kết Nối API & Telegram*)
+
+1. **Telegram Bot (ra lệnh từ điện thoại):**
+   - Mở Telegram tìm `@BotFather` → gõ `/newbot` → lấy **Bot Token** dán vào ReelPilot → bấm **Bật lắng nghe Telegram Bot**.
+   - Nhắn `/start` cho bot trên điện thoại để bot trả về **Owner Chat ID**, dán mã này vào ReelPilot để khóa quyền chỉ riêng bạn sử dụng.
+2. **Pexels API Key (miễn phí):** Đăng ký tại `https://www.pexels.com/api/` để tự tải video dọc `9:16` sạch bản quyền.
+3. **Gemini API Key (miễn phí):** Lấy tại `https://aistudio.google.com/` để viết kịch bản & tiêu đề/hashtag bằng `gemini-2.5-flash`.
+4. **YouTube Shorts (Google Cloud Console):** Bật **YouTube Data API v3**, tạo OAuth 2.0 Client ID với Redirect URI `http://localhost:4330/api/oauth/youtube/callback` → dán vào app → bấm **Kết nối Google / YouTube OAuth**.
+5. **Facebook Page Reels (Meta for Developers):** Nhập **Facebook Page ID** (chỉ hỗ trợ Fanpage) và **Page Access Token** có quyền `pages_manage_posts`, `pages_read_engagement`.
+6. Đổi chế độ từ **Dry-Run** sang **Live Publishing** khi sẵn sàng đăng thật.

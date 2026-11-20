@@ -1,7 +1,7 @@
 {
   "name": "reelpilot-studio",
-  "version": "1.0.0",
-  "description": "Local Auto-Publisher & Scheduler for YouTube Shorts (Data API v3) and Facebook Page Reels (Meta Graph API) with Gemini AI metadata generation and Dry-Run simulation.",
+  "version": "2.0.0",
+  "description": "Local Auto-Video Pipeline & Publisher for YouTube Shorts (Data API v3) and Facebook Page Reels (Meta Graph API) with Telegram Mobile Control, Pexels 9:16 B-Roll, FFmpeg Rendering & Gemini AI.",
   "main": "server/index.js",
   "engines": {
     "node": ">=22.5.0"
