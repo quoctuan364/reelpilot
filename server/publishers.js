@@ -371,12 +371,27 @@ async function testConnections() {
   const result = {
     mode: settings.mode,
     gemini: { ok: false, message: 'Chưa cấu hình GEMINI_API_KEY (đang dùng chế độ gợi ý offline).' },
+    pexels: { ok: false, message: 'Chưa cấu hình Pexels API Key (cần để tự tải video nền 9:16).' },
     youtube: { ok: false, message: 'Chưa kết nối tài khoản Google / YouTube OAuth.' },
     facebook: { ok: false, message: 'Chưa cấu hình Facebook Page ID & Page Access Token.' }
   };
 
   if (settings.gemini_api_key || process.env.GEMINI_API_KEY) {
     result.gemini = { ok: true, message: 'Đã lưu Gemini API Key (sẵn sàng gọi gemini-2.5-flash).' };
+  }
+
+  const pexelsKey = (settings.pexels_api_key || process.env.PEXELS_API_KEY || '').trim();
+  if (pexelsKey) {
+    try {
+      const pRes = await fetch('https://api.pexels.com/videos/popular?per_page=1', {
+        headers: { Authorization: pexelsKey }
+      });
+      result.pexels = pRes.ok
+        ? { ok: true, message: 'Pexels Video API hoạt động bình thường.' }
+        : { ok: false, message: `Pexels API trả về HTTP ${pRes.status}` };
+    } catch (err) {
+      result.pexels = { ok: false, message: err.message };
+    }
   }
 
   if (settings.yt_refresh_token || settings.yt_access_token) {

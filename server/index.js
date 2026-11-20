@@ -7,6 +7,8 @@ const crypto = require('node:crypto');
 const db = require('./db');
 const ai = require('./ai');
 const publishers = require('./publishers');
+const videoPipeline = require('./video-pipeline');
+const telegram = require('./telegram');
 
 const PORT = Number(process.env.PORT) || 4330;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -210,11 +212,15 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (pathname === '/api/bootstrap' && method === 'GET') {
+      const rawSettings = db.getAllSettingsRaw();
       return sendJson(res, 200, {
         stats: db.getStats(),
         settings: db.getSafeSettings(),
         posts: db.listPosts(),
-        logs: db.listLogs(60)
+        jobs: db.listPipelineJobs(20),
+        logs: db.listLogs(80),
+        ffmpeg: videoPipeline.detectFfmpeg(rawSettings.ffmpeg_path),
+        telegram: telegram.getTelegramStatus()
       });
     }
 
@@ -225,6 +231,48 @@ const server = http.createServer(async (req, res) => {
     const mediaMatch = pathname.match(/^\/api\/media\/([^/]+)$/);
     if (mediaMatch && method === 'GET') {
       return serveMediaFile(req, res, decodeURIComponent(mediaMatch[1]));
+    }
+
+    if (pathname === '/api/pipeline/run' && method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await videoPipeline.runAutoVideoPipeline({
+        topic: body.topic,
+        tone: body.tone || 'viral',
+        language: body.language || 'vi',
+        platforms: Array.isArray(body.platforms) && body.platforms.length ? body.platforms : ['youtube', 'facebook'],
+        sourceChannel: 'web',
+        autoPublish: Boolean(body.autoPublish)
+      });
+      return sendJson(res, 201, {
+        ...result,
+        stats: db.getStats()
+      });
+    }
+
+    if (pathname === '/api/pipeline/jobs' && method === 'GET') {
+      return sendJson(res, 200, { jobs: db.listPipelineJobs(20) });
+    }
+
+    const jobSrtMatch = pathname.match(/^\/api\/pipeline\/srt\/([^/]+)$/);
+    if (jobSrtMatch && method === 'GET') {
+      const job = db.getPipelineJobById(decodeURIComponent(jobSrtMatch[1]));
+      if (!job || !job.srtContent) {
+        res.writeHead(404);
+        res.end('SRT not found');
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${job.id}.srt"`
+      });
+      res.end(job.srtContent);
+      return;
+    }
+
+    const jobDelMatch = pathname.match(/^\/api\/pipeline\/jobs\/([^/]+)$/);
+    if (jobDelMatch && method === 'DELETE') {
+      db.deletePipelineJob(decodeURIComponent(jobDelMatch[1]));
+      return sendJson(res, 200, { deleted: true });
     }
 
     if (pathname === '/api/posts' && method === 'GET') {
@@ -298,18 +346,46 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/settings' && method === 'PUT') {
       const body = await readJsonBody(req);
-      db.saveSettings(body);
+      const saved = db.saveSettings(body);
+      if (saved.telegram_enabled === '1' && saved.telegram_bot_token) {
+        await telegram.startTelegramBot();
+      } else if (saved.telegram_enabled === '0') {
+        telegram.stopTelegramBot();
+      }
       db.addLog({
         platform: 'system',
         level: 'info',
-        message: `Đã cập nhật cấu hình hệ thống (Chế độ: ${db.getAllSettingsRaw().mode === 'live' ? 'Đăng thật Live' : 'Chạy thử Dry-Run'}).`
+        message: `Đã cập nhật cấu hình hệ thống (Chế độ: ${saved.mode === 'live' ? 'Đăng thật Live' : 'Chạy thử Dry-Run'}).`
       });
-      return sendJson(res, 200, { settings: db.getSafeSettings() });
+      return sendJson(res, 200, {
+        settings: db.getSafeSettings(),
+        ffmpeg: videoPipeline.detectFfmpeg(saved.ffmpeg_path),
+        telegram: telegram.getTelegramStatus()
+      });
+    }
+
+    if (pathname === '/api/telegram/toggle' && method === 'POST') {
+      const body = await readJsonBody(req);
+      const enable = Boolean(body.enabled);
+      db.saveSettings({ telegram_enabled: enable ? '1' : '0' });
+      const status = enable ? await telegram.startTelegramBot() : (telegram.stopTelegramBot(), telegram.getTelegramStatus());
+      return sendJson(res, 200, {
+        telegram: status,
+        settings: db.getSafeSettings()
+      });
     }
 
     if (pathname === '/api/test-connections' && method === 'POST') {
       const report = await publishers.testConnections();
-      return sendJson(res, 200, { report, settings: db.getSafeSettings() });
+      const raw = db.getAllSettingsRaw();
+      report.telegram = await telegram.testTelegramBot(raw.telegram_bot_token);
+      report.ffmpeg = videoPipeline.detectFfmpeg(raw.ffmpeg_path);
+      return sendJson(res, 200, {
+        report,
+        settings: db.getSafeSettings(),
+        ffmpeg: report.ffmpeg,
+        telegram: telegram.getTelegramStatus()
+      });
     }
 
     if (pathname === '/api/oauth/youtube/start' && method === 'GET') {
@@ -351,8 +427,13 @@ schedulerTimer.unref();
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log('======================================================');
-  console.log('  ReelPilot Studio v1.0 is running!');
+  console.log('  ReelPilot Studio v2.0 is running!');
   console.log(`  Local URL : http://localhost:${PORT}`);
   console.log(`  SQLite DB : ${db.DB_PATH} (WAL Mode)`);
   console.log('======================================================');
+
+  const raw = db.getAllSettingsRaw();
+  if (raw.telegram_enabled === '1' && raw.telegram_bot_token) {
+    telegram.startTelegramBot().catch(() => {});
+  }
 });

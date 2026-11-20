@@ -7,9 +7,10 @@ const { DatabaseSync } = require('node:sqlite');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+const BROLL_DIR = path.join(UPLOADS_DIR, 'broll');
 const DB_PATH = path.join(DATA_DIR, 'reelpilot.sqlite');
 
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+fs.mkdirSync(BROLL_DIR, { recursive: true });
 
 const db = new DatabaseSync(DB_PATH);
 db.exec('PRAGMA journal_mode = WAL;');
@@ -52,11 +53,34 @@ db.exec(`
     message TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS pipeline_jobs (
+    id TEXT PRIMARY KEY,
+    topic TEXT NOT NULL,
+    language TEXT NOT NULL DEFAULT 'vi',
+    tone TEXT NOT NULL DEFAULT 'viral',
+    source_channel TEXT NOT NULL DEFAULT 'web',
+    status TEXT NOT NULL DEFAULT 'queued',
+    render_mode TEXT NOT NULL DEFAULT 'storyboard',
+    plan_json TEXT NOT NULL DEFAULT '{}',
+    srt_content TEXT NOT NULL DEFAULT '',
+    video_filename TEXT NOT NULL DEFAULT '',
+    video_path TEXT NOT NULL DEFAULT '',
+    post_id TEXT,
+    error_message TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
 
 const DEFAULT_SETTINGS = {
   mode: 'dry_run',
   gemini_api_key: '',
+  pexels_api_key: '',
+  ffmpeg_path: 'ffmpeg',
+  telegram_bot_token: '',
+  telegram_chat_id: '',
+  telegram_enabled: '0',
   yt_client_id: '',
   yt_client_secret: '',
   yt_redirect_uri: 'http://localhost:4330/api/oauth/youtube/callback',
@@ -72,6 +96,8 @@ const DEFAULT_SETTINGS = {
 
 const SECRET_KEYS = new Set([
   'gemini_api_key',
+  'pexels_api_key',
+  'telegram_bot_token',
   'yt_client_secret',
   'yt_refresh_token',
   'yt_access_token',
@@ -107,6 +133,9 @@ function getSafeSettings() {
     ...masked,
     connections: {
       geminiConfigured: Boolean(raw.gemini_api_key || process.env.GEMINI_API_KEY),
+      pexelsConfigured: Boolean(raw.pexels_api_key || process.env.PEXELS_API_KEY),
+      telegramConfigured: Boolean(raw.telegram_bot_token),
+      telegramEnabled: raw.telegram_enabled === '1',
       youtubeOAuthReady: Boolean(raw.yt_client_id && raw.yt_client_secret),
       youtubeConnected: Boolean(raw.yt_refresh_token || raw.yt_access_token),
       facebookConnected: Boolean(raw.fb_page_id && raw.fb_page_access_token)
@@ -293,6 +322,85 @@ function getDueScheduledPosts(nowIso = new Date().toISOString()) {
   return rows.map(hydratePost);
 }
 
+function hydrateJob(row) {
+  if (!row) return null;
+  let plan = {};
+  try {
+    plan = JSON.parse(row.plan_json || '{}');
+  } catch {
+    plan = {};
+  }
+  return {
+    id: row.id,
+    topic: row.topic,
+    language: row.language,
+    tone: row.tone,
+    sourceChannel: row.source_channel,
+    status: row.status,
+    renderMode: row.render_mode,
+    plan,
+    srtContent: row.srt_content || '',
+    videoFilename: row.video_filename || '',
+    videoPath: row.video_path || '',
+    postId: row.post_id || null,
+    errorMessage: row.error_message || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function createPipelineJob({ topic, language = 'vi', tone = 'viral', sourceChannel = 'web' }) {
+  const id = genId('job');
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO pipeline_jobs (id, topic, language, tone, source_channel, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)
+  `).run(id, String(topic || '').trim(), language, tone, sourceChannel, now, now);
+  return getPipelineJobById(id);
+}
+
+function getPipelineJobById(id) {
+  const row = db.prepare('SELECT * FROM pipeline_jobs WHERE id = ?').get(id);
+  return hydrateJob(row);
+}
+
+function updatePipelineJob(id, patch) {
+  const ex = getPipelineJobById(id);
+  if (!ex) return null;
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE pipeline_jobs SET
+      status = ?, render_mode = ?, plan_json = ?, srt_content = ?,
+      video_filename = ?, video_path = ?, post_id = ?, error_message = ?, updated_at = ?
+    WHERE id = ?
+  `).run(
+    patch.status !== undefined ? patch.status : ex.status,
+    patch.renderMode !== undefined ? patch.renderMode : ex.renderMode,
+    patch.plan !== undefined ? JSON.stringify(patch.plan) : JSON.stringify(ex.plan),
+    patch.srtContent !== undefined ? String(patch.srtContent) : ex.srtContent,
+    patch.videoFilename !== undefined ? String(patch.videoFilename) : ex.videoFilename,
+    patch.videoPath !== undefined ? String(patch.videoPath) : ex.videoPath,
+    patch.postId !== undefined ? patch.postId : ex.postId,
+    patch.errorMessage !== undefined ? String(patch.errorMessage) : ex.errorMessage,
+    now,
+    id
+  );
+  return getPipelineJobById(id);
+}
+
+function listPipelineJobs(limit = 20) {
+  const rows = db.prepare(`
+    SELECT * FROM pipeline_jobs
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(limit);
+  return rows.map(hydrateJob);
+}
+
+function deletePipelineJob(id) {
+  db.prepare('DELETE FROM pipeline_jobs WHERE id = ?').run(id);
+}
+
 function addLog({ postId = null, platform = 'system', level = 'info', message }) {
   const id = genId('log');
   const now = new Date().toISOString();
@@ -303,14 +411,13 @@ function addLog({ postId = null, platform = 'system', level = 'info', message })
   return { id, postId, platform, level, message, createdAt: now };
 }
 
-function listLogs(limit = 60) {
-  const rows = db.prepare(`
+function listLogs(limit = 80) {
+  return db.prepare(`
     SELECT id, post_id AS postId, platform, level, message, created_at AS createdAt
     FROM logs
     ORDER BY created_at DESC
     LIMIT ?
   `).all(limit);
-  return rows;
 }
 
 function getStats() {
@@ -372,7 +479,7 @@ function seedInitialDataIfEmpty() {
     postId: publishedDemo.id,
     platform: 'system',
     level: 'success',
-    message: '[DRY-RUN] Khởi tạo kho dữ liệu mẫu ReelPilot Studio (SQLite WAL).'
+    message: '[DRY-RUN] Khởi tạo kho dữ liệu mẫu ReelPilot Studio v2.0 (SQLite WAL).'
   });
 }
 
@@ -381,6 +488,7 @@ seedInitialDataIfEmpty();
 module.exports = {
   DATA_DIR,
   UPLOADS_DIR,
+  BROLL_DIR,
   DB_PATH,
   getAllSettingsRaw,
   getSafeSettings,
@@ -392,6 +500,11 @@ module.exports = {
   updatePost,
   deletePost,
   getDueScheduledPosts,
+  createPipelineJob,
+  getPipelineJobById,
+  updatePipelineJob,
+  listPipelineJobs,
+  deletePipelineJob,
   addLog,
   listLogs,
   getStats
