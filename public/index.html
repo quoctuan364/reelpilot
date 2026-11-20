@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReelPilot Studio v1.0 — Auto-Publisher YouTube Shorts &amp; Facebook Reels</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Left Navigation Sidebar -->
+    <aside class="sidebar">
+      <div class="brand-box">
+        <div class="brand-mark">RP</div>
+        <div>
+          <h1>ReelPilot Studio</h1>
+          <span class="brand-sub">Shorts &amp; Reels Automation</span>
+        </div>
+      </div>
+
+      <nav class="side-nav" aria-label="Điều hướng chính">
+        <button type="button" class="nav-btn active" data-view="composer">
+          <span class="nav-dot dot-emerald"></span>
+          <span>Tạo &amp; Lên Lịch</span>
+        </button>
+        <button type="button" class="nav-btn" data-view="queue">
+          <span class="nav-dot dot-amber"></span>
+          <span>Hàng Đợi &amp; Lịch Đăng</span>
+          <span class="nav-badge" id="navQueueCount">0</span>
+        </button>
+        <button type="button" class="nav-btn" data-view="connections">
+          <span class="nav-dot dot-blue"></span>
+          <span>Kết Nối API &amp; Chế Độ</span>
+        </button>
+        <button type="button" class="nav-btn" data-view="logs">
+          <span class="nav-dot dot-slate"></span>
+          <span>Nhật Ký Hoạt Động</span>
+        </button>
+      </nav>
+
+      <div class="side-status-panel">
+        <div class="side-status-title">TRẠNG THÁI KẾT NỐI</div>
+        <div class="conn-row">
+          <span>Chế độ chạy</span>
+          <span class="pill pill-amber" id="sideModePill">DRY-RUN</span>
+        </div>
+        <div class="conn-row">
+          <span>YouTube Data API</span>
+          <span class="pill pill-muted" id="sideYtPill">Chưa nối</span>
+        </div>
+        <div class="conn-row">
+          <span>FB Page Reels API</span>
+          <span class="pill pill-muted" id="sideFbPill">Chưa nối</span>
+        </div>
+        <div class="conn-row">
+          <span>Gemini AI</span>
+          <span class="pill pill-muted" id="sideAiPill">Offline</span>
+        </div>
+      </div>
+
+      <div class="side-stats-grid">
+        <div class="mini-stat">
+          <span class="mini-stat-label">ĐÃ LÊN LỊCH</span>
+          <strong id="statScheduled">0</strong>
+        </div>
+        <div class="mini-stat">
+          <span class="mini-stat-label">ĐÃ ĐĂNG</span>
+          <strong id="statPublished">0</strong>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="main-area">
+      <header class="topbar">
+        <div class="topbar-title-group">
+          <h2 id="viewHeading">Tạo &amp; Lên Lịch Video Ngắn 9:16</h2>
+          <span class="topbar-sub" id="viewSubtitle">Kéo thả video dọc, sinh nội dung bằng Gemini AI và hẹn giờ đăng tự động.</span>
+        </div>
+        <div class="topbar-actions">
+          <button type="button" id="btnQuickModeToggle" class="btn-secondary" title="Chuyển nhanh giữa Chế độ Chạy thử (Dry-Run) và Đăng thật (Live)">
+            Chế độ: Dry-Run (An toàn)
+          </button>
+          <button type="button" id="btnRefreshAll" class="btn-secondary">Làm mới</button>
+        </div>
+      </header>
+
+      <!-- VIEW 1: COMPOSER -->
+      <section id="viewComposer" class="view-section active">
+        <div class="composer-grid">
+          <!-- Left: Video Dropzone + 9:16 Stage Preview -->
+          <div class="panel stage-panel">
+            <div class="panel-header">
+              <span class="panel-tag">01 // VIDEO 9:16 ĐẦU VÀO</span>
+              <span class="file-meta" id="videoMetaText">Chưa chọn video</span>
+            </div>
+
+            <div id="dropzone" class="dropzone" tabindex="0">
+              <input type="file" id="videoFileInput" accept=".mp4,.mov,.webm,.mkv,video/*" hidden />
+              <div id="dropzoneEmpty" class="dropzone-empty">
+                <div class="upload-icon">9:16</div>
+                <h3>Kéo thả file video vào đây</h3>
+                <p>Hỗ trợ <code>.MP4</code>, <code>.MOV</code>, <code>.WEBM</code> (tối đa 250MB). Tỉ lệ khuyến nghị <strong>1080×1920</strong> dưới 60 giây.</p>
+                <button type="button" id="btnPickVideo" class="btn-primary">Chọn video từ máy</button>
+              </div>
+
+              <div id="videoPreviewWrap" class="video-preview-wrap hidden">
+                <video id="videoPreviewPlayer" controls playsinline></video>
+                <div class="video-preview-bar">
+                  <span id="uploadedFileName">video.mp4</span>
+                  <button type="button" id="btnReplaceVideo" class="btn-link">Đổi video khác</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="upload-progress hidden" id="uploadProgressBox">
+              <div class="progress-track"><div class="progress-bar" id="uploadProgressBar"></div></div>
+              <span id="uploadProgressLabel">Đang tải video vào kho cục bộ...</span>
+            </div>
+          </div>
+
+          <!-- Right: AI Generator + Metadata + Schedule Form -->
+          <div class="panel form-panel">
+            <div class="panel-header">
+              <span class="panel-tag">02 // NỘI DUNG &amp; GEMINI AI</span>
+              <span class="pill pill-emerald" id="aiSourceBadge">Gemini AI Ready</span>
+            </div>
+
+            <!-- AI Assistant Box -->
+            <div class="ai-box">
+              <div class="ai-box-row">
+                <input type="text" id="aiTopicInput" class="field-input" placeholder="Nhập chủ đề hoặc tóm tắt kịch bản (vd: 3 mẹo tối ưu thời lượng pin laptop)..." />
+                <select id="aiToneSelect" class="field-select compact-select" aria-label="Phong cách nội dung">
+                  <option value="viral">Cuốn hút / Viral</option>
+                  <option value="educational">Chia sẻ kiến thức</option>
+                  <option value="sales">Bán hàng / Review</option>
+                  <option value="story">Kể chuyện thực tế</option>
+                </select>
+                <select id="aiLangSelect" class="field-select compact-select" aria-label="Ngôn ngữ">
+                  <option value="vi">Tiếng Việt</option>
+                  <option value="en">English</option>
+                </select>
+                <button type="button" id="btnGenerateAi" class="btn-primary">AI Viết Tiêu Đề</button>
+              </div>
+              <div id="aiHookTip" class="ai-hook-tip hidden"></div>
+            </div>
+
+            <!-- Post Form -->
+            <form id="postForm" class="post-form">
+              <div class="field-group">
+                <label for="postTitle">Tiêu đề video (tối đa 100 ký tự cho YouTube Shorts)</label>
+                <input type="text" id="postTitle" class="field-input" maxlength="100" placeholder="VD: 3 mẹo tự động đăng Reels cực nhanh #Shorts" required />
+              </div>
+
+              <div class="field-group">
+                <label for="postDescription">Mô tả / Caption</label>
+                <textarea id="postDescription" class="field-textarea" rows="3" placeholder="Viết mô tả ngắn gọn kèm lời kêu gọi hành động (CTA)..."></textarea>
+              </div>
+
+              <div class="field-group">
+                <label for="postHashtags">Hashtags</label>
+                <input type="text" id="postHashtags" class="field-input font-mono" placeholder="#Shorts #Reels #Automation #TechTips" />
+              </div>
+
+              <div class="form-row-2">
+                <div class="field-group">
+                  <label>Nền tảng đăng tải</label>
+                  <div class="platform-checks">
+                    <label class="platform-toggle yt-toggle">
+                      <input type="checkbox" id="chkYoutube" checked />
+                      <span>YouTube Shorts</span>
+                    </label>
+                    <label class="platform-toggle fb-toggle">
+                      <input type="checkbox" id="chkFacebook" checked />
+                      <span>Facebook Page Reels</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label for="postPrivacy">Quyền riêng tư (YouTube)</label>
+                  <select id="postPrivacy" class="field-select">
+                    <option value="public">Công khai (Public)</option>
+                    <option value="unlisted">Không công khai (Unlisted)</option>
+                    <option value="private">Riêng tư (Private)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row-2">
+                <div class="field-group">
+                  <label for="postScheduleAt">Hẹn giờ tự động đăng (bỏ trống nếu lưu nháp)</label>
+                  <input type="datetime-local" id="postScheduleAt" class="field-input font-mono" />
+                </div>
+                <div class="field-group">
+                  <label>Hành động nhanh</label>
+                  <div class="quick-time-btns">
+                    <button type="button" class="btn-chip" data-plus-min="15">+15 phút</button>
+                    <button type="button" class="btn-chip" data-plus-min="60">+1 giờ</button>
+                    <button type="button" class="btn-chip" data-plus-min="1440">Ngày mai</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button type="button" id="btnPublishNow" class="btn-emerald">Đăng ngay lập tức</button>
+                <button type="submit" id="btnSchedulePost" class="btn-primary">Lưu vào Lịch Hẹn</button>
+                <button type="button" id="btnResetForm" class="btn-secondary">Xóa trắng form</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: QUEUE & HISTORY -->
+      <section id="viewQueue" class="view-section">
+        <div class="queue-toolbar">
+          <div class="filter-tabs" id="queueFilterTabs">
+            <button type="button" class="tab-btn active" data-filter="all">Tất cả</button>
+            <button type="button" class="tab-btn" data-filter="scheduled">Đã lên lịch</button>
+            <button type="button" class="tab-btn" data-filter="published">Đã đăng</button>
+            <button type="button" class="tab-btn" data-filter="failed">Lỗi</button>
+            <button type="button" class="tab-btn" data-filter="draft">Nháp</button>
+          </div>
+          <span class="scheduler-hint">Bộ lập lịch tự động quét mỗi 15 giây khi server đang mở.</span>
+        </div>
+
+        <div id="queueList" class="queue-list"></div>
+      </section>
+
+      <!-- VIEW 3: CONNECTIONS & API SETTINGS -->
+      <section id="viewConnections" class="view-section">
+        <div class="settings-grid">
+          <!-- Mode & Gemini -->
+          <div class="panel settings-card">
+            <div class="panel-header">
+              <span class="panel-tag">CHẾ ĐỘ HOẠT ĐỘNG &amp; GEMINI AI</span>
+            </div>
+            <div class="field-group">
+              <label for="cfgMode">Chế độ đăng mặc định</label>
+              <select id="cfgMode" class="field-select">
+                <option value="dry_run">Dry-Run Simulation (Chạy thử an toàn, không đăng thật)</option>
+                <option value="live">Live Publishing (Đăng thật qua YouTube API &amp; Meta Graph API)</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label for="cfgGeminiKey">Gemini API Key (Tùy chọn — sinh tiêu đề/hashtag bằng gemini-2.5-flash)</label>
+              <input type="password" id="cfgGeminiKey" class="field-input font-mono" placeholder="AIzaSy... (bỏ trống để giữ nguyên key cũ)" autocomplete="off" />
+            </div>
+            <p class="helper-text">Lấy miễn phí tại Google AI Studio (`aistudio.google.com`). Nếu chưa nhập key, hệ thống tự dùng bộ gợi ý offline.</p>
+          </div>
+
+          <!-- YouTube Data API v3 -->
+          <div class="panel settings-card">
+            <div class="panel-header">
+              <span class="panel-tag tag-yt">YOUTUBE SHORTS — DATA API V3 (OAUTH 2.0)</span>
+              <span class="pill pill-muted" id="cfgYtStatus">Chưa kết nối</span>
+            </div>
+            <div class="field-group">
+              <label for="cfgYtClientId">Google OAuth Client ID</label>
+              <input type="text" id="cfgYtClientId" class="field-input font-mono" placeholder="xxxx.apps.googleusercontent.com" />
+            </div>
+            <div class="field-group">
+              <label for="cfgYtClientSecret">Google OAuth Client Secret</label>
+              <input type="password" id="cfgYtClientSecret" class="field-input font-mono" placeholder="GOCSPX-... (bỏ trống để giữ nguyên)" autocomplete="off" />
+            </div>
+            <div class="field-group">
+              <label for="cfgYtRedirectUri">Authorized Redirect URI (dán vào Google Cloud Console)</label>
+              <input type="text" id="cfgYtRedirectUri" class="field-input font-mono" value="http://localhost:4330/api/oauth/youtube/callback" />
+            </div>
+            <div class="card-actions">
+              <button type="button" id="btnConnectYoutube" class="btn-yt">Kết nối Google / YouTube OAuth</button>
+            </div>
+          </div>
+
+          <!-- Facebook Page Reels API -->
+          <div class="panel settings-card">
+            <div class="panel-header">
+              <span class="panel-tag tag-fb">FACEBOOK PAGE REELS — META GRAPH API</span>
+              <span class="pill pill-muted" id="cfgFbStatus">Chưa kết nối</span>
+            </div>
+            <div class="field-group">
+              <label for="cfgFbPageId">Facebook Page ID (Chỉ hỗ trợ Fanpage chính thức)</label>
+              <input type="text" id="cfgFbPageId" class="field-input font-mono" placeholder="VD: 102938475612345" />
+            </div>
+            <div class="field-group">
+              <label for="cfgFbToken">Page Access Token (quyền pages_manage_posts)</label>
+              <input type="password" id="cfgFbToken" class="field-input font-mono" placeholder="EAAG... (bỏ trống để giữ nguyên)" autocomplete="off" />
+            </div>
+            <div class="field-group">
+              <label for="cfgFbVersion">Graph API Version</label>
+              <input type="text" id="cfgFbVersion" class="field-input font-mono" value="v21.0" />
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-footer-bar">
+          <button type="button" id="btnSaveSettings" class="btn-primary">Lưu toàn bộ cấu hình</button>
+          <button type="button" id="btnTestConnections" class="btn-secondary">Kiểm tra kết nối API</button>
+          <span id="testResultText" class="test-result-text"></span>
+        </div>
+      </section>
+
+      <!-- VIEW 4: ACTIVITY LOGS -->
+      <section id="viewLogs" class="view-section">
+        <div class="panel logs-panel">
+          <div class="panel-header">
+            <span class="panel-tag">NHẬT KÝ HỆ THỐNG &amp; SCHEDULER (SQLITE WAL)</span>
+            <button type="button" id="btnReloadLogs" class="btn-secondary">Tải lại nhật ký</button>
+          </div>
+          <div id="logsList" class="logs-list"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
