@@ -2,43 +2,52 @@
   'use strict';
 
   const VIEW_META = {
+    pipeline: {
+      heading: 'Auto-Video Pipeline — Tự Kiếm Cảnh, Dựng Video & Đăng',
+      subtitle: 'Nhập chủ đề (hoặc nhắn /make trên Telegram từ điện thoại) để tự tạo kịch bản, .SRT, video 9:16 và xuất bản YT/FB.'
+    },
     composer: {
-      heading: 'Tạo & Lên Lịch Video Ngắn 9:16',
-      subtitle: 'Kéo thả video dọc, sinh tiêu đề/hashtag bằng Gemini AI và hẹn giờ đăng tự động.'
+      heading: 'Tạo & Lên Lịch Video Ngắn 9:16 Thủ Công',
+      subtitle: 'Kéo thả video dọc có sẵn, sinh tiêu đề/hashtag bằng Gemini AI và hẹn giờ đăng tự động.'
     },
     queue: {
       heading: 'Hàng Đợi & Lịch Sử Đăng Video',
       subtitle: 'Theo dõi trạng thái YouTube Shorts & Facebook Page Reels, kích hoạt đăng ngay hoặc quản lý lịch hẹn.'
     },
     connections: {
-      heading: 'Kết Nối API Chính Thức & Chế Độ Chạy',
-      subtitle: 'Cấu hình YouTube Data API v3, Meta Graph API (Fanpage Reels), Gemini API và chuyển đổi Dry-Run / Live.'
+      heading: 'Kết Nối API, Telegram Mobile & FFmpeg',
+      subtitle: 'Cấu hình Telegram Bot, Pexels B-Roll, FFmpeg, YouTube Data API v3, Meta Graph API và chế độ Dry-Run / Live.'
     },
     logs: {
-      heading: 'Nhật Ký Hoạt Động & Scheduler',
-      subtitle: 'Theo dõi chi tiết từng bước upload, mô phỏng Dry-Run và phản hồi từ API.'
+      heading: 'Nhật Ký Hoạt Động, Telegram & Scheduler',
+      subtitle: 'Theo dõi chi tiết từng bước dựng video, lệnh Telegram, mô phỏng Dry-Run và phản hồi API.'
     }
   };
 
   const state = {
-    activeView: 'composer',
+    activeView: 'pipeline',
     queueFilter: 'all',
     settings: null,
+    ffmpeg: { available: false, version: '' },
+    telegram: { running: false, botUsername: '', lastError: '' },
     stats: { total: 0, scheduled: 0, published: 0, failed: 0, draft: 0 },
     posts: [],
+    jobs: [],
     logs: [],
-    uploadedVideo: null // { videoFilename, videoPath, videoSize, previewUrl, originalName }
+    uploadedVideo: null
   };
 
   const $ = (id) => document.getElementById(id);
 
   const el = {
     navBtns: Array.from(document.querySelectorAll('.nav-btn')),
+    navJobCount: $('navJobCount'),
     navQueueCount: $('navQueueCount'),
     sideModePill: $('sideModePill'),
+    sideTgPill: $('sideTgPill'),
     sideYtPill: $('sideYtPill'),
     sideFbPill: $('sideFbPill'),
-    sideAiPill: $('sideAiPill'),
+    sideMediaPill: $('sideMediaPill'),
     statScheduled: $('statScheduled'),
     statPublished: $('statPublished'),
     viewHeading: $('viewHeading'),
@@ -46,11 +55,22 @@
     btnQuickModeToggle: $('btnQuickModeToggle'),
     btnRefreshAll: $('btnRefreshAll'),
     views: {
+      pipeline: $('viewPipeline'),
       composer: $('viewComposer'),
       queue: $('viewQueue'),
       connections: $('viewConnections'),
       logs: $('viewLogs')
     },
+    pipelineEngineBadge: $('pipelineEngineBadge'),
+    pipelineForm: $('pipelineForm'),
+    pipeTopicInput: $('pipeTopicInput'),
+    pipeToneSelect: $('pipeToneSelect'),
+    pipeLangSelect: $('pipeLangSelect'),
+    pipeChkYt: $('pipeChkYt'),
+    pipeChkFb: $('pipeChkFb'),
+    pipeAutoPublish: $('pipeAutoPublish'),
+    btnRunPipeline: $('btnRunPipeline'),
+    pipelineJobsList: $('pipelineJobsList'),
     dropzone: $('dropzone'),
     videoFileInput: $('videoFileInput'),
     dropzoneEmpty: $('dropzoneEmpty'),
@@ -85,6 +105,14 @@
     queueList: $('queueList'),
     cfgMode: $('cfgMode'),
     cfgGeminiKey: $('cfgGeminiKey'),
+    cfgTgToken: $('cfgTgToken'),
+    cfgTgChatId: $('cfgTgChatId'),
+    cfgTgStatus: $('cfgTgStatus'),
+    btnToggleTelegram: $('btnToggleTelegram'),
+    cfgPexelsKey: $('cfgPexelsKey'),
+    cfgFfmpegPath: $('cfgFfmpegPath'),
+    cfgFfmpegStatus: $('cfgFfmpegStatus'),
+    ffmpegHelpText: $('ffmpegHelpText'),
     cfgYtClientId: $('cfgYtClientId'),
     cfgYtClientSecret: $('cfgYtClientSecret'),
     cfgYtRedirectUri: $('cfgYtRedirectUri'),
@@ -153,7 +181,7 @@
   }
 
   function formatBytes(bytes) {
-    if (!bytes) return 'Demo';
+    if (!bytes) return 'Storyboard';
     const mb = bytes / (1024 * 1024);
     return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
   }
@@ -162,7 +190,7 @@
     state.activeView = view;
     el.navBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.view === view));
     Object.entries(el.views).forEach(([k, sec]) => sec.classList.toggle('active', k === view));
-    const meta = VIEW_META[view] || VIEW_META.composer;
+    const meta = VIEW_META[view] || VIEW_META.pipeline;
     el.viewHeading.textContent = meta.heading;
     el.viewSubtitle.textContent = meta.subtitle;
     if (view === 'logs') reloadLogs();
@@ -172,42 +200,129 @@
     const s = state.settings;
     if (!s) return;
     const isLive = s.mode === 'live';
+    const conn = s.connections || {};
+    const ffReady = Boolean(state.ffmpeg?.available);
+    const tgRunning = Boolean(state.telegram?.running);
 
     el.sideModePill.textContent = isLive ? 'LIVE' : 'DRY-RUN';
     el.sideModePill.className = `pill ${isLive ? 'pill-emerald' : 'pill-amber'}`;
     el.btnQuickModeToggle.textContent = isLive ? 'Chế độ: Đăng thật (LIVE)' : 'Chế độ: Dry-Run (An toàn)';
 
-    const conn = s.connections || {};
+    el.sideTgPill.textContent = tgRunning ? (state.telegram.botUsername || 'Đang nghe') : (conn.telegramConfigured ? 'Sẵn sàng' : 'Tắt');
+    el.sideTgPill.className = `pill ${tgRunning ? 'pill-emerald' : (conn.telegramConfigured ? 'pill-amber' : 'pill-muted')}`;
+
     el.sideYtPill.textContent = conn.youtubeConnected ? (s.yt_channel_name || 'Đã nối') : 'Chưa nối';
     el.sideYtPill.className = `pill ${conn.youtubeConnected ? 'pill-emerald' : 'pill-muted'}`;
 
     el.sideFbPill.textContent = conn.facebookConnected ? (s.fb_page_name || 'Đã nối') : 'Chưa nối';
     el.sideFbPill.className = `pill ${conn.facebookConnected ? 'pill-emerald' : 'pill-muted'}`;
 
-    el.sideAiPill.textContent = conn.geminiConfigured ? 'Gemini API' : 'Offline';
-    el.sideAiPill.className = `pill ${conn.geminiConfigured ? 'pill-emerald' : 'pill-amber'}`;
+    const fullAutoRender = ffReady && conn.pexelsConfigured;
+    el.sideMediaPill.textContent = fullAutoRender ? 'Full MP4' : 'Storyboard';
+    el.sideMediaPill.className = `pill ${fullAutoRender ? 'pill-emerald' : 'pill-amber'}`;
+
+    el.pipelineEngineBadge.textContent = fullAutoRender
+      ? 'Full Auto Render (Pexels + FFmpeg 1080×1920)'
+      : 'Chế độ Storyboard + .SRT (gắn Pexels & FFmpeg để xuất .MP4)';
+    el.pipelineEngineBadge.className = `pill ${fullAutoRender ? 'pill-emerald' : 'pill-amber'}`;
 
     el.aiSourceBadge.textContent = conn.geminiConfigured ? 'Gemini 2.5 Flash' : 'Offline Preview AI';
     el.aiSourceBadge.className = `pill ${conn.geminiConfigured ? 'pill-emerald' : 'pill-amber'}`;
 
+    el.navJobCount.textContent = String(state.jobs.length || 0);
     el.navQueueCount.textContent = String(state.stats.total || 0);
     el.statScheduled.textContent = String(state.stats.scheduled || 0);
     el.statPublished.textContent = String(state.stats.published || 0);
 
-    // Populate Settings inputs
+    // Settings inputs
     el.cfgMode.value = s.mode || 'dry_run';
     el.cfgGeminiKey.placeholder = s.gemini_api_key ? `Đã lưu (${s.gemini_api_key})` : 'AIzaSy... (nhập Gemini API Key)';
+
+    el.cfgTgToken.placeholder = s.telegram_bot_token ? `Đã lưu (${s.telegram_bot_token})` : '123456:ABC-DEF...';
+    el.cfgTgChatId.value = s.telegram_chat_id || '';
+    el.cfgTgStatus.textContent = tgRunning ? `Đang nghe (${state.telegram.botUsername || 'Bot'})` : 'Đang tắt';
+    el.cfgTgStatus.className = `pill ${tgRunning ? 'pill-emerald' : 'pill-muted'}`;
+    el.btnToggleTelegram.textContent = tgRunning ? 'Tắt lắng nghe Telegram Bot' : 'Bật lắng nghe Telegram Bot';
+
+    el.cfgPexelsKey.placeholder = s.pexels_api_key ? `Đã lưu (${s.pexels_api_key})` : 'Lấy miễn phí tại pexels.com/api';
+    el.cfgFfmpegPath.value = s.ffmpeg_path || 'ffmpeg';
+    el.cfgFfmpegStatus.textContent = ffReady ? 'FFmpeg OK' : 'Chưa cài FFmpeg';
+    el.cfgFfmpegStatus.className = `pill ${ffReady ? 'pill-emerald' : 'pill-amber'}`;
+    if (el.ffmpegHelpText) {
+      el.ffmpegHelpText.innerHTML = ffReady
+        ? `Đã nhận diện: <code>${escapeHtml(state.ffmpeg.version.slice(0, 72))}</code>`
+        : 'Máy chưa có FFmpeg. Mở Terminal chạy <code>winget install Gyan.FFmpeg</code> rồi mở lại server.';
+    }
+
     el.cfgYtClientId.value = s.yt_client_id || '';
     el.cfgYtClientSecret.placeholder = s.yt_client_secret ? `Đã lưu (${s.yt_client_secret})` : 'GOCSPX-...';
     el.cfgYtRedirectUri.value = s.yt_redirect_uri || 'http://localhost:4330/api/oauth/youtube/callback';
-    el.cfgYtStatus.textContent = conn.youtubeConnected ? `Đã nối: ${s.yt_channel_name || 'YouTube'}` : 'Chưa kết nối';
+    el.cfgYtStatus.textContent = conn.youtubeConnected ? `Đã nối: ${s.yt_channel_name || 'YouTube'}` : 'Chưa nối';
     el.cfgYtStatus.className = `pill ${conn.youtubeConnected ? 'pill-emerald' : 'pill-muted'}`;
 
     el.cfgFbPageId.value = s.fb_page_id || '';
     el.cfgFbToken.placeholder = s.fb_page_access_token ? `Đã lưu (${s.fb_page_access_token})` : 'EAAG...';
     el.cfgFbVersion.value = s.fb_api_version || 'v21.0';
-    el.cfgFbStatus.textContent = conn.facebookConnected ? `Đã nối: ${s.fb_page_name || s.fb_page_id}` : 'Chưa kết nối';
+    el.cfgFbStatus.textContent = conn.facebookConnected ? `Đã nối: ${s.fb_page_name || s.fb_page_id}` : 'Chưa nối';
     el.cfgFbStatus.className = `pill ${conn.facebookConnected ? 'pill-emerald' : 'pill-muted'}`;
+  }
+
+  function renderPipelineJobs() {
+    if (!state.jobs.length) {
+      el.pipelineJobsList.innerHTML = `
+        <div class="panel" style="text-align:center;color:var(--text-muted);padding:26px;">
+          Chưa có video tự động nào. Hãy nhập 1 chủ đề phía trên rồi bấm <strong>Chạy Tự Động Hóa</strong> (hoặc nhắn <code>/make chủ đề</code> từ Telegram).
+        </div>`;
+      return;
+    }
+
+    el.pipelineJobsList.innerHTML = state.jobs.map(job => {
+      const plan = job.plan || {};
+      const scenes = Array.isArray(plan.scenes) ? plan.scenes : [];
+      const modePill = job.renderMode === 'rendered_mp4'
+        ? '<span class="pill pill-emerald">MP4 1080×1920</span>'
+        : '<span class="pill pill-amber">STORYBOARD + .SRT</span>';
+      const srcPill = job.sourceChannel === 'telegram'
+        ? '<span class="pill pill-fb">TỪ TELEGRAM</span>'
+        : '<span class="pill pill-muted">TỪ WEB</span>';
+
+      return `
+        <article class="queue-card">
+          <div class="queue-card-main">
+            <div class="queue-card-top">
+              ${modePill}
+              ${srcPill}
+              <span class="pill pill-muted">${escapeHtml(job.status.toUpperCase())}</span>
+            </div>
+            <div class="queue-card-title">${escapeHtml(plan.title || job.topic)}</div>
+            <div class="queue-card-desc">${escapeHtml(plan.hashtags || '')}</div>
+            <div class="queue-card-meta">
+              <span>Chủ đề: ${escapeHtml(job.topic)}</span>
+              <span>Lúc: ${formatDateTime(job.createdAt)}</span>
+            </div>
+            ${scenes.length ? `
+              <div class="scenes-grid">
+                ${scenes.map((sc, idx) => `
+                  <div class="scene-chip">
+                    <div class="scene-chip-head">
+                      <span>CẢNH ${idx + 1}</span>
+                      <span>${sc.durationSec || 4.5}s</span>
+                    </div>
+                    <div><strong>${escapeHtml(sc.subtitle)}</strong></div>
+                    <div class="scene-chip-query">Pexels: ${escapeHtml(sc.searchQuery)}</div>
+                  </div>
+                `).join('')}
+              </div>` : ''}
+            ${job.errorMessage ? `<div class="queue-error">${escapeHtml(job.errorMessage)}</div>` : ''}
+          </div>
+          <div class="queue-card-actions">
+            ${job.srtContent ? `<a class="btn-secondary" style="text-decoration:none;" href="/api/pipeline/srt/${encodeURIComponent(job.id)}">Tải .SRT</a>` : ''}
+            ${job.postId ? `<button type="button" class="btn-emerald" data-job-publish="${escapeHtml(job.postId)}">Duyệt &amp; Đăng Ngay</button>` : ''}
+            <button type="button" class="btn-danger" data-job-delete="${escapeHtml(job.id)}">Xóa</button>
+          </div>
+        </article>
+      `;
+    }).join('');
   }
 
   function renderQueue() {
@@ -215,7 +330,7 @@
     if (!filtered.length) {
       el.queueList.innerHTML = `
         <div class="panel" style="text-align:center;color:var(--text-muted);padding:28px;">
-          Không có video nào trong mục này. Hãy sang tab <strong>Tạo &amp; Lên Lịch</strong> để thêm video mới.
+          Không có video nào trong mục này.
         </div>`;
       return;
     }
@@ -226,7 +341,7 @@
         published: ['pill-emerald', dryRun ? 'ĐÃ ĐĂNG (DRY-RUN)' : 'ĐÃ ĐĂNG LIVE'],
         publishing: ['pill-fb', 'ĐANG TẢI LÊN...'],
         failed: ['pill-yt', 'LỖI ĐĂNG'],
-        draft: ['pill-muted', 'BẢN NHÁP']
+        draft: ['pill-muted', 'CHỜ DUYỆT / NHÁP']
       };
       const [cls, label] = map[status] || ['pill-muted', status.toUpperCase()];
       return `<span class="pill ${cls}">${label}</span>`;
@@ -298,9 +413,13 @@
     const data = await api('/api/bootstrap');
     state.stats = data.stats || state.stats;
     state.settings = data.settings || state.settings;
+    state.ffmpeg = data.ffmpeg || state.ffmpeg;
+    state.telegram = data.telegram || state.telegram;
     state.posts = data.posts || [];
+    state.jobs = data.jobs || [];
     state.logs = data.logs || [];
     renderSidebarAndSettings();
+    renderPipelineJobs();
     renderQueue();
     renderLogs();
   }
@@ -363,13 +482,9 @@
     const platforms = [];
     if (el.chkYoutube.checked) platforms.push('youtube');
     if (el.chkFacebook.checked) platforms.push('facebook');
-    if (!platforms.length) {
-      throw new Error('Hãy chọn ít nhất 1 nền tảng (YouTube Shorts hoặc Facebook Page Reels).');
-    }
+    if (!platforms.length) throw new Error('Hãy chọn ít nhất 1 nền tảng.');
     const title = el.postTitle.value.trim();
-    if (!title) {
-      throw new Error('Vui lòng nhập tiêu đề video.');
-    }
+    if (!title) throw new Error('Vui lòng nhập tiêu đề video.');
 
     const schedVal = el.postScheduleAt.value;
     const scheduledAt = schedVal ? new Date(schedVal).toISOString() : null;
@@ -401,12 +516,7 @@
       resetComposerForm();
       if (publishNow) {
         const ok = res.post?.status === 'published';
-        showToast(
-          ok
-            ? `Đã đăng bài "${res.post.title}" thành công!`
-            : `Đăng bài gặp lỗi: ${res.post?.lastError || 'Kiểm tra Nhật ký'}`,
-          ok ? 'emerald' : 'error'
-        );
+        showToast(ok ? `Đã đăng bài "${res.post.title}"!` : `Lỗi: ${res.post?.lastError}`, ok ? 'emerald' : 'error');
       } else {
         showToast(payload.scheduledAt ? 'Đã thêm video vào Lịch Hẹn!' : 'Đã lưu Bản Nháp!');
       }
@@ -429,11 +539,73 @@
       state.settings = res.settings;
       renderSidebarAndSettings();
       showToast(
-        nextMode === 'live'
-          ? 'Đã chuyển sang chế độ ĐĂNG THẬT (LIVE)'
-          : 'Đã chuyển về chế độ CHẠY THỬ (DRY-RUN)',
+        nextMode === 'live' ? 'Đã chuyển sang chế độ ĐĂNG THẬT (LIVE)' : 'Đã chuyển về chế độ CHẠY THỬ (DRY-RUN)',
         nextMode === 'live' ? 'emerald' : 'amber'
       );
+    });
+
+    // Auto-Video Pipeline form
+    el.pipelineForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const topic = el.pipeTopicInput.value.trim();
+      if (!topic) return;
+      const platforms = [];
+      if (el.pipeChkYt.checked) platforms.push('youtube');
+      if (el.pipeChkFb.checked) platforms.push('facebook');
+      if (!platforms.length) {
+        showToast('Chọn ít nhất 1 nền tảng (YouTube hoặc Facebook).', 'amber');
+        return;
+      }
+
+      el.btnRunPipeline.disabled = true;
+      el.btnRunPipeline.textContent = 'Đang chạy dây chuyền...';
+      try {
+        const res = await api('/api/pipeline/run', {
+          method: 'POST',
+          body: JSON.stringify({
+            topic,
+            tone: el.pipeToneSelect.value,
+            language: el.pipeLangSelect.value,
+            platforms,
+            autoPublish: el.pipeAutoPublish.checked
+          })
+        });
+        el.pipeTopicInput.value = '';
+        await bootstrap();
+        showToast(
+          res.job?.renderMode === 'rendered_mp4'
+            ? 'Đã dựng xong video MP4 1080×1920 + phụ đề .SRT!'
+            : 'Đã tạo xong kịch bản, 4 cảnh B-Roll & file phụ đề .SRT!'
+        );
+      } catch (err) {
+        showToast(`Lỗi Pipeline: ${err.message}`, 'error');
+      } finally {
+        el.btnRunPipeline.disabled = false;
+        el.btnRunPipeline.textContent = 'Chạy Tự Động Hóa';
+      }
+    });
+
+    el.pipelineJobsList.addEventListener('click', async (e) => {
+      const pubBtn = e.target.closest('button[data-job-publish]');
+      if (pubBtn) {
+        pubBtn.disabled = true;
+        pubBtn.textContent = 'Đang đăng...';
+        try {
+          const res = await api(`/api/posts/${encodeURIComponent(pubBtn.dataset.jobPublish)}/publish-now`, { method: 'POST' });
+          await bootstrap();
+          const ok = res.post?.status === 'published';
+          showToast(ok ? 'Đã duyệt & đăng bài thành công!' : `Lỗi đăng: ${res.post?.lastError}`, ok ? 'emerald' : 'error');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+        return;
+      }
+      const delBtn = e.target.closest('button[data-job-delete]');
+      if (delBtn) {
+        await api(`/api/pipeline/jobs/${encodeURIComponent(delBtn.dataset.jobDelete)}`, { method: 'DELETE' });
+        await bootstrap();
+        showToast('Đã xóa lịch sử job.');
+      }
     });
 
     // Video upload drag & drop
@@ -452,11 +624,11 @@
       uploadVideoFile(e.dataTransfer?.files?.[0]);
     });
 
-    // AI Metadata Generator
+    // Manual Composer AI
     el.btnGenerateAi.addEventListener('click', async () => {
       const topic = el.aiTopicInput.value.trim() || el.postTitle.value.trim();
       if (!topic) {
-        showToast('Hãy nhập chủ đề hoặc ý tưởng video trước khi bấm AI Viết Tiêu Đề.', 'amber');
+        showToast('Hãy nhập chủ đề trước khi bấm AI Viết Tiêu Đề.', 'amber');
         el.aiTopicInput.focus();
         return;
       }
@@ -488,13 +660,11 @@
       }
     });
 
-    // Quick schedule chips
     el.quickTimeBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         const mins = Number(btn.dataset.plusMin || 15);
         const dt = new Date(Date.now() + mins * 60000);
-        const localIso = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        el.postScheduleAt.value = localIso;
+        el.postScheduleAt.value = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
       });
     });
 
@@ -505,7 +675,7 @@
     el.btnPublishNow.addEventListener('click', () => submitPost(true));
     el.btnResetForm.addEventListener('click', resetComposerForm);
 
-    // Queue filter & actions
+    // Queue
     el.queueFilterTabs.forEach(tab => {
       tab.addEventListener('click', () => {
         state.queueFilter = tab.dataset.filter;
@@ -531,41 +701,75 @@
           const res = await api(`/api/posts/${encodeURIComponent(id)}/publish-now`, { method: 'POST' });
           await bootstrap();
           const ok = res.post?.status === 'published';
-          showToast(
-            ok ? 'Đăng bài thành công!' : `Lỗi đăng bài: ${res.post?.lastError || 'Xem nhật ký'}`,
-            ok ? 'emerald' : 'error'
-          );
+          showToast(ok ? 'Đăng bài thành công!' : `Lỗi: ${res.post?.lastError}`, ok ? 'emerald' : 'error');
         }
       } catch (err) {
         showToast(err.message, 'error');
       }
     });
 
-    // Settings
+    // Settings & Telegram Toggle
     el.btnSaveSettings.addEventListener('click', async () => {
       try {
-        const payload = {
-          mode: el.cfgMode.value,
-          gemini_api_key: el.cfgGeminiKey.value.trim(),
-          yt_client_id: el.cfgYtClientId.value.trim(),
-          yt_client_secret: el.cfgYtClientSecret.value.trim(),
-          yt_redirect_uri: el.cfgYtRedirectUri.value.trim(),
-          fb_page_id: el.cfgFbPageId.value.trim(),
-          fb_page_access_token: el.cfgFbToken.value.trim(),
-          fb_api_version: el.cfgFbVersion.value.trim() || 'v21.0'
-        };
         const res = await api('/api/settings', {
           method: 'PUT',
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            mode: el.cfgMode.value,
+            gemini_api_key: el.cfgGeminiKey.value.trim(),
+            telegram_bot_token: el.cfgTgToken.value.trim(),
+            telegram_chat_id: el.cfgTgChatId.value.trim(),
+            pexels_api_key: el.cfgPexelsKey.value.trim(),
+            ffmpeg_path: el.cfgFfmpegPath.value.trim() || 'ffmpeg',
+            yt_client_id: el.cfgYtClientId.value.trim(),
+            yt_client_secret: el.cfgYtClientSecret.value.trim(),
+            yt_redirect_uri: el.cfgYtRedirectUri.value.trim(),
+            fb_page_id: el.cfgFbPageId.value.trim(),
+            fb_page_access_token: el.cfgFbToken.value.trim(),
+            fb_api_version: el.cfgFbVersion.value.trim() || 'v21.0'
+          })
         });
         state.settings = res.settings;
+        state.ffmpeg = res.ffmpeg || state.ffmpeg;
+        state.telegram = res.telegram || state.telegram;
         el.cfgGeminiKey.value = '';
+        el.cfgTgToken.value = '';
+        el.cfgPexelsKey.value = '';
         el.cfgYtClientSecret.value = '';
         el.cfgFbToken.value = '';
         renderSidebarAndSettings();
-        showToast('Đã lưu cấu hình API an toàn vào SQLite!');
+        showToast('Đã lưu toàn bộ cấu hình vào SQLite!');
       } catch (err) {
         showToast(`Lỗi lưu cấu hình: ${err.message}`, 'error');
+      }
+    });
+
+    el.btnToggleTelegram.addEventListener('click', async () => {
+      try {
+        if (el.cfgTgToken.value.trim() || el.cfgTgChatId.value.trim()) {
+          await api('/api/settings', {
+            method: 'PUT',
+            body: JSON.stringify({
+              telegram_bot_token: el.cfgTgToken.value.trim(),
+              telegram_chat_id: el.cfgTgChatId.value.trim()
+            })
+          });
+          el.cfgTgToken.value = '';
+        }
+        const nextEnable = !state.telegram?.running;
+        const res = await api('/api/telegram/toggle', {
+          method: 'POST',
+          body: JSON.stringify({ enabled: nextEnable })
+        });
+        state.telegram = res.telegram;
+        state.settings = res.settings;
+        renderSidebarAndSettings();
+        if (res.telegram.error) {
+          showToast(`Telegram Bot: ${res.telegram.error}`, 'error');
+        } else {
+          showToast(res.telegram.running ? `Đã bật Telegram Bot ${res.telegram.botUsername}` : 'Đã tắt Telegram Bot');
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
       }
     });
 
@@ -592,10 +796,12 @@
       try {
         const res = await api('/api/test-connections', { method: 'POST' });
         state.settings = res.settings;
+        state.ffmpeg = res.ffmpeg || state.ffmpeg;
+        state.telegram = res.telegram || state.telegram;
         renderSidebarAndSettings();
         const r = res.report;
-        el.testResultText.textContent = `YT: ${r.youtube.ok ? 'OK' : 'Chưa nối'} · FB: ${r.facebook.ok ? 'OK' : 'Chưa nối'} · Gemini: ${r.gemini.ok ? 'OK' : 'Offline'}`;
-        showToast('Đã hoàn tất kiểm tra kết nối API.');
+        el.testResultText.textContent = `YT: ${r.youtube.ok ? 'OK' : 'Off'} · FB: ${r.facebook.ok ? 'OK' : 'Off'} · TG: ${r.telegram.ok ? 'OK' : 'Off'} · Pexels: ${r.pexels.ok ? 'OK' : 'Off'} · FFmpeg: ${r.ffmpeg.available ? 'OK' : 'Chưa cài'}`;
+        showToast('Đã hoàn tất kiểm tra toàn bộ API & FFmpeg.');
       } catch (err) {
         el.testResultText.textContent = `Lỗi: ${err.message}`;
       } finally {

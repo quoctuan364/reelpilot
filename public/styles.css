@@ -139,6 +139,7 @@ html, body {
   border-radius: 50%;
   flex-shrink: 0;
 }
+.dot-cyan { background: #06b6d4; }
 .dot-emerald { background: var(--accent-emerald); }
 .dot-amber { background: var(--accent-amber); }
 .dot-blue { background: var(--accent-fb); }
@@ -354,6 +355,92 @@ html, body {
 }
 .tag-yt { color: #f87171; }
 .tag-fb { color: #60a5fa; }
+.tag-cyan { color: #22d3ee; }
+
+/* Auto-Video Pipeline */
+.pipeline-steps-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.step-pill {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.step-pill strong {
+  font-family: var(--font-mono);
+  color: #22d3ee;
+  margin-right: 5px;
+}
+.step-arrow {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.pipeline-launcher {
+  margin-bottom: 18px;
+}
+.pipeline-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pipeline-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px 150px;
+  gap: 10px;
+}
+.pipeline-options-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.section-subhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.section-subhead h3 {
+  font-family: var(--font-display);
+  font-size: 15.5px;
+}
+.scenes-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+}
+.scene-chip {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+}
+.scene-chip-head {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #22d3ee;
+  margin-bottom: 4px;
+}
+.scene-chip-query {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
 
 .file-meta {
   font-family: var(--font-mono);

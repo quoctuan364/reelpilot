@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ReelPilot Studio v1.0 — Auto-Publisher YouTube Shorts &amp; Facebook Reels</title>
+  <title>ReelPilot Studio v2.0 — Auto-Video Pipeline, Telegram Mobile &amp; Shorts/Reels</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,17 +14,22 @@
     <!-- Left Navigation Sidebar -->
     <aside class="sidebar">
       <div class="brand-box">
-        <div class="brand-mark">RP</div>
+        <div class="brand-mark">RP2</div>
         <div>
           <h1>ReelPilot Studio</h1>
-          <span class="brand-sub">Shorts &amp; Reels Automation</span>
+          <span class="brand-sub">Auto-Video &amp; Publishing · v2.0</span>
         </div>
       </div>
 
       <nav class="side-nav" aria-label="Điều hướng chính">
-        <button type="button" class="nav-btn active" data-view="composer">
+        <button type="button" class="nav-btn active" data-view="pipeline">
+          <span class="nav-dot dot-cyan"></span>
+          <span>Auto-Video Pipeline</span>
+          <span class="nav-badge" id="navJobCount">0</span>
+        </button>
+        <button type="button" class="nav-btn" data-view="composer">
           <span class="nav-dot dot-emerald"></span>
-          <span>Tạo &amp; Lên Lịch</span>
+          <span>Tạo &amp; Lên Lịch Thủ Công</span>
         </button>
         <button type="button" class="nav-btn" data-view="queue">
           <span class="nav-dot dot-amber"></span>
@@ -33,7 +38,7 @@
         </button>
         <button type="button" class="nav-btn" data-view="connections">
           <span class="nav-dot dot-blue"></span>
-          <span>Kết Nối API &amp; Chế Độ</span>
+          <span>Kết Nối API &amp; Telegram</span>
         </button>
         <button type="button" class="nav-btn" data-view="logs">
           <span class="nav-dot dot-slate"></span>
@@ -42,22 +47,26 @@
       </nav>
 
       <div class="side-status-panel">
-        <div class="side-status-title">TRẠNG THÁI KẾT NỐI</div>
+        <div class="side-status-title">TRẠNG THÁI HỆ THỐNG</div>
         <div class="conn-row">
           <span>Chế độ chạy</span>
           <span class="pill pill-amber" id="sideModePill">DRY-RUN</span>
         </div>
         <div class="conn-row">
-          <span>YouTube Data API</span>
+          <span>Telegram Mobile</span>
+          <span class="pill pill-muted" id="sideTgPill">Tắt</span>
+        </div>
+        <div class="conn-row">
+          <span>YouTube Shorts</span>
           <span class="pill pill-muted" id="sideYtPill">Chưa nối</span>
         </div>
         <div class="conn-row">
-          <span>FB Page Reels API</span>
+          <span>FB Page Reels</span>
           <span class="pill pill-muted" id="sideFbPill">Chưa nối</span>
         </div>
         <div class="conn-row">
-          <span>Gemini AI</span>
-          <span class="pill pill-muted" id="sideAiPill">Offline</span>
+          <span>Pexels / FFmpeg</span>
+          <span class="pill pill-muted" id="sideMediaPill">Storyboard</span>
         </div>
       </div>
 
@@ -77,8 +86,8 @@
     <main class="main-area">
       <header class="topbar">
         <div class="topbar-title-group">
-          <h2 id="viewHeading">Tạo &amp; Lên Lịch Video Ngắn 9:16</h2>
-          <span class="topbar-sub" id="viewSubtitle">Kéo thả video dọc, sinh nội dung bằng Gemini AI và hẹn giờ đăng tự động.</span>
+          <h2 id="viewHeading">Auto-Video Pipeline — Tự Kiếm Cảnh, Dựng Video &amp; Đăng</h2>
+          <span class="topbar-sub" id="viewSubtitle">Nhập chủ đề (hoặc gửi lệnh /make từ Telegram trên điện thoại) để tự tạo kịch bản, .SRT, video 9:16 và đăng YT/FB.</span>
         </div>
         <div class="topbar-actions">
           <button type="button" id="btnQuickModeToggle" class="btn-secondary" title="Chuyển nhanh giữa Chế độ Chạy thử (Dry-Run) và Đăng thật (Live)">
@@ -88,10 +97,71 @@
         </div>
       </header>
 
-      <!-- VIEW 1: COMPOSER -->
-      <section id="viewComposer" class="view-section active">
+      <!-- VIEW 0: AUTO-VIDEO PIPELINE -->
+      <section id="viewPipeline" class="view-section active">
+        <div class="pipeline-steps-bar">
+          <div class="step-pill"><strong>01</strong> Chủ đề / Telegram <code>/make</code></div>
+          <div class="step-arrow">→</div>
+          <div class="step-pill"><strong>02</strong> Gemini Script &amp; <code>.SRT</code></div>
+          <div class="step-arrow">→</div>
+          <div class="step-pill"><strong>03</strong> Pexels 9:16 B-Roll</div>
+          <div class="step-arrow">→</div>
+          <div class="step-pill"><strong>04</strong> FFmpeg Render <code>1080×1920</code></div>
+          <div class="step-arrow">→</div>
+          <div class="step-pill"><strong>05</strong> Duyệt &amp; Đăng YT / FB</div>
+        </div>
+
+        <div class="panel pipeline-launcher">
+          <div class="panel-header">
+            <span class="panel-tag">KHỞI CHẠY DÂY CHUYỀN TỰ ĐỘNG (AUTO-VIDEO GENERATOR)</span>
+            <span class="pill pill-muted" id="pipelineEngineBadge">Chế độ Storyboard + .SRT</span>
+          </div>
+
+          <form id="pipelineForm" class="pipeline-form">
+            <div class="pipeline-input-row">
+              <input type="text" id="pipeTopicInput" class="field-input" placeholder="Nhập chủ đề video (VD: 3 mẹo tăng tốc Windows cực dễ trong 30 giây)..." required />
+              <select id="pipeToneSelect" class="field-select">
+                <option value="viral">Cuốn hút / Viral</option>
+                <option value="educational">Chia sẻ kiến thức</option>
+                <option value="sales">Review / Affiliate</option>
+                <option value="story">Kể chuyện thực tế</option>
+              </select>
+              <select id="pipeLangSelect" class="field-select">
+                <option value="vi">Tiếng Việt</option>
+                <option value="en">English (Global)</option>
+              </select>
+            </div>
+
+            <div class="pipeline-options-row">
+              <div class="platform-checks">
+                <label class="platform-toggle yt-toggle">
+                  <input type="checkbox" id="pipeChkYt" checked />
+                  <span>YouTube Shorts</span>
+                </label>
+                <label class="platform-toggle fb-toggle">
+                  <input type="checkbox" id="pipeChkFb" checked />
+                  <span>Facebook Page Reels</span>
+                </label>
+                <label class="platform-toggle">
+                  <input type="checkbox" id="pipeAutoPublish" />
+                  <span>Tự động đăng ngay sau khi dựng xong</span>
+                </label>
+              </div>
+              <button type="submit" id="btnRunPipeline" class="btn-emerald">Chạy Tự Động Hóa</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="section-subhead">
+          <h3>Lịch sử Video Tự Động Tạo Gần Đây</h3>
+          <span class="scheduler-hint">Bấm <strong>Tải .SRT</strong> để dùng phụ đề hoặc bấm <strong>Duyệt &amp; Đăng Ngay</strong> để xuất bản.</span>
+        </div>
+        <div id="pipelineJobsList" class="queue-list"></div>
+      </section>
+
+      <!-- VIEW 1: MANUAL COMPOSER -->
+      <section id="viewComposer" class="view-section">
         <div class="composer-grid">
-          <!-- Left: Video Dropzone + 9:16 Stage Preview -->
           <div class="panel stage-panel">
             <div class="panel-header">
               <span class="panel-tag">01 // VIDEO 9:16 ĐẦU VÀO</span>
@@ -122,17 +192,15 @@
             </div>
           </div>
 
-          <!-- Right: AI Generator + Metadata + Schedule Form -->
           <div class="panel form-panel">
             <div class="panel-header">
               <span class="panel-tag">02 // NỘI DUNG &amp; GEMINI AI</span>
               <span class="pill pill-emerald" id="aiSourceBadge">Gemini AI Ready</span>
             </div>
 
-            <!-- AI Assistant Box -->
             <div class="ai-box">
               <div class="ai-box-row">
-                <input type="text" id="aiTopicInput" class="field-input" placeholder="Nhập chủ đề hoặc tóm tắt kịch bản (vd: 3 mẹo tối ưu thời lượng pin laptop)..." />
+                <input type="text" id="aiTopicInput" class="field-input" placeholder="Nhập chủ đề hoặc tóm tắt kịch bản..." />
                 <select id="aiToneSelect" class="field-select compact-select" aria-label="Phong cách nội dung">
                   <option value="viral">Cuốn hút / Viral</option>
                   <option value="educational">Chia sẻ kiến thức</option>
@@ -148,7 +216,6 @@
               <div id="aiHookTip" class="ai-hook-tip hidden"></div>
             </div>
 
-            <!-- Post Form -->
             <form id="postForm" class="post-form">
               <div class="field-group">
                 <label for="postTitle">Tiêu đề video (tối đa 100 ký tự cho YouTube Shorts)</label>
@@ -247,17 +314,53 @@
               </select>
             </div>
             <div class="field-group">
-              <label for="cfgGeminiKey">Gemini API Key (Tùy chọn — sinh tiêu đề/hashtag bằng gemini-2.5-flash)</label>
-              <input type="password" id="cfgGeminiKey" class="field-input font-mono" placeholder="AIzaSy... (bỏ trống để giữ nguyên key cũ)" autocomplete="off" />
+              <label for="cfgGeminiKey">Gemini API Key (sinh kịch bản + tiêu đề bằng gemini-2.5-flash)</label>
+              <input type="password" id="cfgGeminiKey" class="field-input font-mono" placeholder="AIzaSy... (bỏ trống để giữ nguyên)" autocomplete="off" />
             </div>
-            <p class="helper-text">Lấy miễn phí tại Google AI Studio (`aistudio.google.com`). Nếu chưa nhập key, hệ thống tự dùng bộ gợi ý offline.</p>
+            <p class="helper-text">Lấy miễn phí tại Google AI Studio (`aistudio.google.com`).</p>
+          </div>
+
+          <!-- Telegram Mobile Control -->
+          <div class="panel settings-card">
+            <div class="panel-header">
+              <span class="panel-tag tag-cyan">TELEGRAM BOT — RA LỆNH TỪ ĐIỆN THOẠI</span>
+              <span class="pill pill-muted" id="cfgTgStatus">Đang tắt</span>
+            </div>
+            <div class="field-group">
+              <label for="cfgTgToken">Telegram Bot Token (tạo qua @BotFather)</label>
+              <input type="password" id="cfgTgToken" class="field-input font-mono" placeholder="123456:ABC-DEF... (bỏ trống để giữ nguyên)" autocomplete="off" />
+            </div>
+            <div class="field-group">
+              <label for="cfgTgChatId">Owner Chat ID (khóa quyền chỉ cho riêng điện thoại của bạn)</label>
+              <input type="text" id="cfgTgChatId" class="field-input font-mono" placeholder="VD: 5123456789 (nhắn /start cho bot để lấy mã)" />
+            </div>
+            <div class="card-actions">
+              <button type="button" id="btnToggleTelegram" class="btn-secondary">Bật lắng nghe Telegram Bot</button>
+            </div>
+          </div>
+
+          <!-- Pexels Stock Video & FFmpeg -->
+          <div class="panel settings-card">
+            <div class="panel-header">
+              <span class="panel-tag">PEXELS 9:16 B-ROLL &amp; FFMPEG RENDER</span>
+              <span class="pill pill-muted" id="cfgFfmpegStatus">Kiểm tra...</span>
+            </div>
+            <div class="field-group">
+              <label for="cfgPexelsKey">Pexels API Key (miễn phí — tự tải video dọc sạch bản quyền)</label>
+              <input type="password" id="cfgPexelsKey" class="field-input font-mono" placeholder="Lấy tại pexels.com/api (bỏ trống để giữ nguyên)" autocomplete="off" />
+            </div>
+            <div class="field-group">
+              <label for="cfgFfmpegPath">Đường dẫn FFmpeg</label>
+              <input type="text" id="cfgFfmpegPath" class="field-input font-mono" value="ffmpeg" />
+            </div>
+            <p class="helper-text" id="ffmpegHelpText">Cài nhanh FFmpeg trên Windows: <code>winget install Gyan.FFmpeg</code> rồi mở lại server.</p>
           </div>
 
           <!-- YouTube Data API v3 -->
           <div class="panel settings-card">
             <div class="panel-header">
               <span class="panel-tag tag-yt">YOUTUBE SHORTS — DATA API V3 (OAUTH 2.0)</span>
-              <span class="pill pill-muted" id="cfgYtStatus">Chưa kết nối</span>
+              <span class="pill pill-muted" id="cfgYtStatus">Chưa nối</span>
             </div>
             <div class="field-group">
               <label for="cfgYtClientId">Google OAuth Client ID</label>
@@ -268,7 +371,7 @@
               <input type="password" id="cfgYtClientSecret" class="field-input font-mono" placeholder="GOCSPX-... (bỏ trống để giữ nguyên)" autocomplete="off" />
             </div>
             <div class="field-group">
-              <label for="cfgYtRedirectUri">Authorized Redirect URI (dán vào Google Cloud Console)</label>
+              <label for="cfgYtRedirectUri">Authorized Redirect URI</label>
               <input type="text" id="cfgYtRedirectUri" class="field-input font-mono" value="http://localhost:4330/api/oauth/youtube/callback" />
             </div>
             <div class="card-actions">
@@ -280,14 +383,14 @@
           <div class="panel settings-card">
             <div class="panel-header">
               <span class="panel-tag tag-fb">FACEBOOK PAGE REELS — META GRAPH API</span>
-              <span class="pill pill-muted" id="cfgFbStatus">Chưa kết nối</span>
+              <span class="pill pill-muted" id="cfgFbStatus">Chưa nối</span>
             </div>
             <div class="field-group">
-              <label for="cfgFbPageId">Facebook Page ID (Chỉ hỗ trợ Fanpage chính thức)</label>
+              <label for="cfgFbPageId">Facebook Page ID (chỉ hỗ trợ Fanpage)</label>
               <input type="text" id="cfgFbPageId" class="field-input font-mono" placeholder="VD: 102938475612345" />
             </div>
             <div class="field-group">
-              <label for="cfgFbToken">Page Access Token (quyền pages_manage_posts)</label>
+              <label for="cfgFbToken">Page Access Token (pages_manage_posts)</label>
               <input type="password" id="cfgFbToken" class="field-input font-mono" placeholder="EAAG... (bỏ trống để giữ nguyên)" autocomplete="off" />
             </div>
             <div class="field-group">
@@ -299,7 +402,7 @@
 
         <div class="settings-footer-bar">
           <button type="button" id="btnSaveSettings" class="btn-primary">Lưu toàn bộ cấu hình</button>
-          <button type="button" id="btnTestConnections" class="btn-secondary">Kiểm tra kết nối API</button>
+          <button type="button" id="btnTestConnections" class="btn-secondary">Kiểm tra toàn bộ API &amp; FFmpeg</button>
           <span id="testResultText" class="test-result-text"></span>
         </div>
       </section>
@@ -308,7 +411,7 @@
       <section id="viewLogs" class="view-section">
         <div class="panel logs-panel">
           <div class="panel-header">
-            <span class="panel-tag">NHẬT KÝ HỆ THỐNG &amp; SCHEDULER (SQLITE WAL)</span>
+            <span class="panel-tag">NHẬT KÝ HỆ THỐNG, TELEGRAM &amp; SCHEDULER</span>
             <button type="button" id="btnReloadLogs" class="btn-secondary">Tải lại nhật ký</button>
           </div>
           <div id="logsList" class="logs-list"></div>
